@@ -1,0 +1,129 @@
+---
+title: "RGB Image Denoise"
+author: "jing.tong"
+output: html_document
+---
+
+
+```{r, echo=FALSE}
+library("EBImage")
+  guidedFilter <- function(guide, src, radius, eps)
+  {
+    #该用box，但是box有问题，效果不对，先用Gaussian走通流程
+    w <- makeBrush(size = as.integer(radius),shape='Gaussian', sigma=100)
+    
+    mean_guide <- filter2(guide, w)
+    mean_guide_2 <- mean_guide * mean_guide
+    mean_guide2 <- filter2(mean_guide_2, w)
+    var_guide <- mean_guide2 - mean_guide * mean_guide
+    
+    mean_src <- filter2(src, w)
+    mean_src_2 <- mean_src * mean_src
+    mean_src2 <- filter2(mean_src_2, w)
+    cov_src <- mean_src2 - mean_src * mean_src
+    
+    a <- cov_src/(var_guide + eps)
+    b <- mean_guide - a * mean_guide
+    
+    mean_a <- filter2(a, w)
+    mean_b <- filter2(b, w)
+    
+    return(mean_a * guide + mean_b)
+  }
+  
+  guidedFilterRCaculate <- function(avgLum)
+  {
+      if (avgLum > 140)
+      {
+          filterR <- 1;
+      }
+      else if (avgLum > 120)
+      {
+          filterR <- 1 + 5 * (140 - avgLum) / 20;
+      }
+      else if (avgLum > 60)
+      {
+          filterR <- 5 + 5 * (120 - avgLum) / 60;
+      }
+      else if (avgLum > 40)
+      {
+          filterR <- 10 + 25 * (60 - avgLum) / 20;
+      }
+     else if (avgLum > 20)
+      {
+          filterR <- 25 + 10 * (40 - avgLum) / 20;
+      }
+      else if (avgLum >= 0)
+      {
+          filterR <- 35 + 15 * (20 - avgLum) / 20;
+      }
+  
+      return(filterR);
+  }
+  
+  denoiseColor<- function(input,eps)
+  {
+    resizeW <- dim(input)[1]/5
+    resizeH <- dim(input)[2]/5
+    smallImg <- resize(input, w=resizeW, h=resizeH)
+    
+    avg_b <- mean(imageData(smallImg)[,,1])
+    avg_g <- mean(imageData(smallImg)[,,2])
+    avg_r <- mean(imageData(smallImg)[,,3])
+    avgLum <- (2990 * avg_r + 5870 * avg_g + 1140 * avg_b)/10000
+    
+    radius <- guidedFilterRCaculate(avgLum)
+    
+    input <- input/255
+    smallOut <- guidedFilter(input, input, radius, eps)
+    smallOut <- smallOut * 255
+    out <- resize(smallOut, w=dim(input)[1], h=dim(input)[2])
+    
+    return(out)
+    
+  }
+```
+
+# 1. Introduction
+
+This is an automatic report for RGB image denoise result. And this report is generated on ```r date()```.
+
+This paper show RGB image denoise experiment. This step is a component of supernight pipeline.
+
+# 2. Algorithm
+
+The input images are the output of the alignment. We take the following steps to do RGB image denoise.
+
+* resize RGB image to 1/25 of original size.
+* caculate the average luminance of the image.
+* caculate the filter radius according to the average luminance.
+* blur the image.
+* resize the blurred image to original size.
+
+# 3. Experiment
+
+Below, we compared the images before denoise and after denoise.
+
+```{r, echo=FALSE}
+  library("EBImage")
+  img <- readImage("E:/work/R/RGB Denoise/rgb1.jpg")
+  eps <- 0.2
+  out <- denoiseColor(img, eps)
+  img_comb <- combine(img, out)
+  display(img_comb, all=TRUE)
+  text(x = 20, y = 20, label = "before", adj = c(0,1), col = "red", cex = 1)
+  text(x = dim(img)[1], y = 20, label = "after", adj = c(0,1), col = "red", cex = 1)
+  writeImage(out, "rgb_denoise.jpg", quality = 100)
+```
+
+For a closer look, we crop a small piece from the image and enlarge it.
+
+```{r, echo=FALSE}
+  img_crop <- img[3650:3900, 30:180,]
+  out_crop <- out[3650:3900, 30:180,]
+  crop_comb <- combine(img_crop, out_crop)
+  display(crop_comb, all=TRUE)
+  text(x = 20, y = 20, label = "before", adj = c(0,1), col = "red", cex = 1)
+  text(x = dim(img_crop)[1], y = 20, label = "after", adj = c(0,1), col = "red", cex = 1)
+```
+

@@ -1,0 +1,104 @@
+---
+title: "Local Color Correction Using Non-Linear Masking"
+author: "jing.tong"
+output: html_document
+---
+
+
+```{r, echo=FALSE}
+library("EBImage")
+  nonLinearMask <- function(input, radius, sig, midtone)
+  {
+    resizeW <- dim(input)[1]/5
+    resizeH <- dim(input)[2]/5
+    smallImg <- resize(input, w=resizeW, h=resizeH)
+    
+    input2y <- 0.299 * imageData(input)[,,3] + 0.587 *  imageData(input)[,,2] + 0.114 *  imageData(input)[,,1]
+		input2u <- -0.147 * imageData(input)[,,3] - 0.289 *  imageData(input)[,,2] + 0.436 *  imageData(input)[,,1]
+		input2v <- 0.615 * imageData(input)[,,3] - 0.515 *  imageData(input)[,,2] - 0.1000 *  imageData(input)[,,1]
+		
+		smallImg2y <- 0.299 * imageData(smallImg)[,,3] + 0.587 *  imageData(smallImg)[,,2] + 0.114 *  imageData(smallImg)[,,1]
+		
+		smallImg2y <- 1.0 - smallImg2y
+		
+		w <- makeBrush(size = radius,shape='Gaussian', sigma=sig)
+		tmpMask <- filter2(smallImg2y, w)
+		mask <- resize(tmpMask, w=dim(input)[1], h=dim(input)[2])
+		
+		out <- input
+		exponent <- 2^((midtone - mask) / midtone)
+		input2y <- input2y^exponent
+		
+		imageData(out)[,,1] <- input2y + 2.032 * input2u
+		imageData(out)[,,2] <- input2y - 0.394  * input2u - 0.581 * input2v
+		imageData(out)[,,3] <- input2y + 1.140 * input2v
+    
+    return(out)
+  }
+```
+
+# 1. Introduction
+
+This is an automatic report for RGB image local color correction using non-linear masking result. And this report is generated on ```r date()```.
+
+This paper show RGB image local color correction using non-linear masking experiment. This step is a component of supernight pipeline.
+
+# 2. Algorithm
+
+The input images are the output of the fusion. The following is the block diagram of the algorithm.
+
+```{r, echo=FALSE}
+  library("EBImage")
+  img <- readImage("E:/work/R/Color Correction/Local1.jpg")
+  display(img)
+```
+
+The whole algorithm can be divided into two parts:
+
+* calculate an image mask.
+* combine the mask and the input image.
+
+## 2.1. Calculate mask
+
+There are several steps to derivate the image mask.
+
+* convert RGB image to gray image.
+* invert the gray image.
+* blur the inverted image using large radiua filter.
+
+## 2.2. Combination
+
+This step implement by a simple equation.
+
+```{r, echo=FALSE}
+  library("EBImage")
+  img <- readImage("E:/work/R/Color Correction/Local2.jpg")
+  display(img)
+```
+
+
+And a curve can express the relationship between input and output through mask.
+
+```{r, echo=FALSE}
+  library("EBImage")
+  img <- readImage("E:/work/R/Color Correction/Local3.jpg")
+  display(img)
+```
+
+# 3. Experiment
+
+Below, we compared the images before correction and after correction.
+
+```{r, echo=FALSE}
+  library("EBImage")
+  img <- readImage("E:/work/R/Color Correction/fusion2_1.jpg")
+  radius <- 15
+  sigma <- 9
+  midtone <- 0.5
+  out <- nonLinearMask(img, radius, sigma, midtone)
+  img_comb <- combine(img, out)
+  display(img_comb, all=TRUE)
+  text(x = 20, y = 20, label = "before", adj = c(0,1), col = "red", cex = 1)
+  text(x = dim(img)[1], y = 20, label = "after", adj = c(0,1), col = "red", cex = 1)
+  writeImage(out, "colorCorrection.jpg", quality = 100)
+```

@@ -1,0 +1,129 @@
+---
+title: "RGB + MONO Fusion"
+author: "jing.tong"
+output: html_document
+---
+
+```{r, echo=FALSE}
+library("EBImage")
+  fusion <- function(rgb, mono)
+  {
+			rgb2y <- 0.299 * imageData(rgb)[,,3] + 0.587 *  imageData(rgb)[,,2] + 0.114 *  imageData(rgb)[,,1]
+			rgb2u <- -0.147 * imageData(rgb)[,,3] - 0.289 *  imageData(rgb)[,,2] + 0.436 *  imageData(rgb)[,,1]
+			rgb2v <- 0.615 * imageData(rgb)[,,3] - 0.515 *  imageData(rgb)[,,2] - 0.1000 *  imageData(rgb)[,,1]
+
+			rgb2y[rgb2y == 0] <- 1
+			
+			eps <- 0.000001
+			
+			ratio <- 1 + ((imageData(mono)[,,1]+eps)/(rgb2y+eps) - 1)/2
+			fusiony <- imageData(mono)[,,1]
+			fusionu <- rgb2u * ratio
+			fusionv <- rgb2v * ratio
+			
+			out <- rgb
+
+			imageData(out)[,,1] <- fusiony + 2.032 * fusionu
+			imageData(out)[,,2] <- fusiony - 0.394  * fusionu - 0.581 * fusionv
+			imageData(out)[,,3] <- fusiony + 1.140 * fusionv
+
+			imageData(out)[,,1][imageData(out)[,,1] < 0] <- 0
+			imageData(out)[,,1][imageData(out)[,,1] > 1] <- 1
+			imageData(out)[,,2][imageData(out)[,,2] < 0] <- 0
+			imageData(out)[,,2][imageData(out)[,,2] > 1] <- 1
+			imageData(out)[,,3][imageData(out)[,,3] < 0] <- 0
+			imageData(out)[,,3][imageData(out)[,,3] > 1] <- 1
+			
+			return(out)
+  }
+```
+
+# 1. Introduction
+This is an automatic report for RGB & MONO image fusion result. And this report is generated on ```r date()```.
+
+This paper show RGB & MONO image fusion experiment. This step is a component of supernight pipeline.
+
+# 2. Algorithm
+
+The input rgb image is the output of the rgb denoise and mono image is the output of the alignment. We take the following steps to do RGB & MONO image fusion.
+
+* transform rgb image to yuv image.
+* replace y channel of rgb image with mono y channel.
+* adjust uv channel of rgb according to yrgb/ymono.
+* transform fusion yuv image to rgb image.
+
+# 3. Experiment
+
+## 3.1. Fusion with un-denoised rgb image
+
+The following are input rgb image without denoise and mono image.
+
+```{r, echo=FALSE}
+  library("EBImage")
+  rgb_comp <- readImage("E:/work/R/RGB MONO Fusion/rgb1.jpg")
+  mono <- readImage("E:/work/R/RGB MONO Fusion/mono1.jpg")
+  input_comb <- combine(rgb_comp, mono)
+  display(input_comb, all = TRUE)
+  text(x = 20, y = 20, label = "RGB", adj = c(0,1), col = "red", cex = 1)
+  text(x = dim(rgb_comp)[1], y = 20, label = "MONO", adj = c(0,1), col = "red", cex = 1)
+```
+
+and after our fusion algorithm, we get fusion image.
+
+```{r, echo=FALSE}
+  out_comp <- fusion(rgb_comp, mono)
+  out_combine <- combine(rgb_comp, out_comp)
+  display(out_combine, all = TRUE)
+  text(x = 20, y = 20, label = "RGB", adj = c(0,1), col = "red", cex = 1)
+  text(x = dim(out_comp)[1], y = 20, label = "Fusion", adj = c(0,1), col = "red", cex = 1)
+  writeImage(out_comp, "fusion_1.jpg", quality = 100)
+```
+
+It is observed that, without rgb image denoise, the fusion image have many color noise. This may have side-effect for our supernight feature.
+
+## 3.2. Fusion with denoised rgb image
+
+So, we do another experiment. The input rgb image is a denoised image.
+
+```{r, echo=FALSE}
+  rgb <- readImage("E:/work/R/RGB MONO Fusion/rgb1_denoise.jpg")
+  input_comb <- combine(rgb, mono)
+  display(input_comb, all = TRUE)
+  text(x = 20, y = 20, label = "RGB", adj = c(0,1), col = "red", cex = 1)
+  text(x = dim(rgb)[1], y = 20, label = "MONO", adj = c(0,1), col = "red", cex = 1)
+```
+
+and after our fusion algorithm, we get fusion image.
+
+```{r, echo=FALSE}
+  out <- fusion(rgb, mono)
+  out_combine <- combine(rgb, out)
+  display(out_combine, all = TRUE)
+  text(x = 20, y = 20, label = "RGB", adj = c(0,1), col = "red", cex = 1)
+  text(x = dim(out)[1], y = 20, label = "Fusion", adj = c(0,1), col = "red", cex = 1)
+  writeImage(out, "fusion_2.jpg", quality = 100)
+```
+
+## 3.3. Two result comparison
+
+Let's compare the different fusion result.
+
+```{r, echo=FALSE}
+  comp_combine <- combine(out_comp, out)
+  display(comp_combine, all = TRUE)
+  text(x = 20, y = 20, label = "Fusion(without rgb denoise)", adj = c(0,1), col = "red", cex = 1)
+  text(x = dim(out)[1], y = 20, label = "Fusion(with rgb denoise)", adj = c(0,1), col = "red", cex = 1)
+```
+
+For a closer look, we crop a small piece from the image and enlarge it.
+
+```{r, echo=FALSE}
+  out_comp_crop <- out_comp[3650:3900, 30:180,]
+  out_crop <- out[3650:3900, 30:180,]
+  crop_comb <- combine(out_comp_crop, out_crop)
+  display(crop_comb, all=TRUE)
+  text(x = 20, y = 20, label = "un-denoise", adj = c(0,1), col = "red", cex = 1)
+  text(x = dim(out_crop)[1], y = 20, label = "denoise", adj = c(0,1), col = "red", cex = 1)
+```
+
+Through Comparative Analysis, we found the fusion image with rgb denoise didn't have color noise anymore, its y channel noise come from mono image. And we will denoise the fusion y channel noise later.
